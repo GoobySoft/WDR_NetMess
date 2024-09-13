@@ -1,13 +1,21 @@
 {
-    "NumServers": 3,
+    "Connections": 2,
+
     "ServerIPList": [
-      "192.168.1.1",
-      "192.168.1.2",
-      "192.168.1.3"
+      "192.168.0.168",
+      "192.168.0.168"
     ],
+    
     "ServerPortList": [
-      8080,
-      8081,
-      8082
-    ]
+      5201,
+      5202
+    ],
+
+    "Args" : {
+      "Protocol" : "UDP",
+      "GetServerData" : true,
+      "ReverseMode" : false,
+      "TestRunimeSeconds" : 12,
+      "ReportIntervall": 2
+    }
   }

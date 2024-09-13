@@ -5,45 +5,118 @@ import (
 	"fmt"
 	"io"
 	"os"
+	"os/exec"
 	"strconv"
+	"strings"
 	"sync"
 	"time"
 )
 
-type Config struct {
-	NumServers     int
-	ServerIPList   []string
-	ServerPortList []int
+type Args struct {
+	Protocol          string `json:"Protocol"`
+	GetServerData     bool   `json:"GetServerData"`
+	ReverseMode       bool   `json:"ReverseMode"`
+	TestRunimeSeconds int    `json:"TestRunimeSeconds"`
+	ReportIntervall   int    `json:"ReportIntervall"`
 }
 
-func RunIperf(config *Config, outputFileName string, wg *sync.WaitGroup, errChan chan<- error) {
+type Config struct {
+	Connections    int      `json:"Connections"`
+	ServerIPList   []string `json:"ServerIPList"`
+	ServerPortList []int    `json:"ServerPortList"`
+	Args           Args     `json:"Args"`
+}
+
+func RunTest(config *Config) {
+
+	timestamp := time.Now().Format("Mon Jan 2 15:04:05 MST 2006")
+
+	err := os.Mkdir("./"+timestamp, os.ModePerm)
+	if err != nil {
+		fmt.Printf("Error creating directory: %v\n", err)
+		return
+	}
+
+	err = CopyFile("config.json", "./"+timestamp+"/config.json")
+	if err != nil {
+		fmt.Printf("Error copying config.json into new directory: %v\n", err)
+		return
+	}
+
+	outputDir := "./" + timestamp // Define the output directory
+
+	var wg sync.WaitGroup
+	errChan := make(chan error, len(config.ServerIPList)) // Buffered channel to collect errors
+
+	for i := range config.ServerIPList {
+
+		outputFileName := "Site_" + strconv.Itoa(i)
+
+		wg.Add(1)
+
+		go RunIperf(config, i, outputFileName, outputDir, &wg, errChan)
+	}
+
+	wg.Wait()      // Wait for all goroutines to finish
+	close(errChan) // Close the channel to stop range loop
+
+	for err := range errChan {
+		if err != nil {
+			fmt.Printf("Error: %v\n", err)
+		}
+	}
+
+	fmt.Println("All Iperf tests completed.")
+}
+
+func GenerateIperfArgs(config *Config, siteNum int) []string {
+	args := []string{
+		"-c", config.ServerIPList[siteNum],
+		"-p", strconv.Itoa(config.ServerPortList[siteNum]),
+		"-t", strconv.Itoa(config.Args.TestRunimeSeconds),
+		"-i", strconv.Itoa(config.Args.ReportIntervall),
+	}
+
+	// Add the -u flag if the protocol is UDP
+	if config.Args.Protocol == "UDP" {
+		args = append([]string{"-u"}, args...)
+	}
+
+	// Add the -R flag if reverse mode is true
+	if config.Args.ReverseMode {
+		args = append([]string{"-R"}, args...)
+	}
+
+	// Add the --get-server-output flag if we want the server output
+	if config.Args.GetServerData {
+		args = append([]string{"--get-server-output"}, args...)
+	}
+
+	return args
+}
+
+func RunIperf(config *Config, siteNum int, outputFileName string, outputDir string, wg *sync.WaitGroup, errChan chan<- error) {
 	defer wg.Done() // Decrement the counter when the goroutine completes
 
-	/* Uncomment and replace with actual iperf execution code
+	fmt.Println("Running iperf for", outputFileName)
+
 	var cmd *exec.Cmd
 
-	if runtime.GOOS == "windows" {
-		// Windows specific command - Not implemented yet
-		// cmd = exec.Command("iperf.exe", "-c", server, "-t", fmt.Sprintf("%d", duration))
-		fmt.Printf("Windows as a runtime enviroment is not yet implemented")
-		errChan <- fmt.Errorf("Windows environment not supported")
-		return
-	} else {
-		// Linux or other Unix-like OS command
-		// cmd = exec.Command("iperf", "-c", server, "-t", fmt.Sprintf("%d", duration))
-	}
+	args := GenerateIperfArgs(config, siteNum)
+
+	cmd = exec.Command("iperf3", args...)
 
 	// Run the iperf command and capture the output
 	output, err := cmd.CombinedOutput()
 	if err != nil {
-		errChan <- fmt.Errorf("Error running iperf: %v", err)
+		errChan <- fmt.Errorf("error running iperf: %v", err)
 		return
 	}
 
 	// Open the file for writing the output
-	file, err := os.Create(outputFileName + ".txt")
+	file, err := os.Create(outputDir + "/" + outputFileName + ".txt")
 	if err != nil {
-		errChan <- fmt.Errorf("Error creating output file: %v", err)
+		errChan <- fmt.Errorf("error creating output file: %v", err)
 		return
 	}
 	defer file.Close()
@@ -51,20 +124,11 @@ func RunIperf(config *Config, outputFileName string, wg *sync.WaitGroup, errChan
 	// Write the output to the file
 	_, err = file.WriteString(string(output))
 	if err != nil {
-		errChan <- fmt.Errorf("Error writing output to file: %v", err)
+		errChan <- fmt.Errorf("error writing output to file: %v", err)
 		return
 	}
-	*/
 
-	fmt.Println("Running iperf for", outputFileName)
 	time.Sleep(2 * time.Second) // Simulate some work being done
-
-	// Simulate an error for demonstration purposes
-	// Remove or handle properly in real code
-	if outputFileName == "Site_1_iperf_output" { // Simulate an error for specific case
-		errChan <- fmt.Errorf("Simulated error for %s", outputFileName)
-		return
-	}
 
 	errChan <- nil // Indicate success
 }
@@ -100,43 +164,146 @@ func main() {
 		return
 	}
 
-	timestamp := time.Now().Format("Mon Jan 2 15:04:05 MST 2006")
+	input := ""
 
-	err := os.Mkdir("./"+timestamp, os.ModePerm)
-	if err != nil {
-		fmt.Printf("Error creating directory: %v\n", err)
-		return
-	}
+	// menu loop
+	for {
+		PrintTitle()
+		PrintMenu()
+		fmt.Printf("\n")
+		fmt.Printf(">")
 
-	err = CopyFile("config.json", "./"+timestamp+"/config.json")
-	if err != nil {
-		fmt.Printf("Error copying config.json into new directory: %v\n", err)
-		return
-	}
-
-	var wg sync.WaitGroup
-	errChan := make(chan error, len(config.ServerIPList)) // Buffered channel to collect errors
-
-	for i := range config.ServerIPList {
-
-		outputFileName := "Site_" + strconv.Itoa(i) + "_iperf_output"
-
-		wg.Add(1)
-
-		go RunIperf(config, outputFileName, &wg, errChan)
-	}
-
-	wg.Wait()      // Wait for all goroutines to finish
-	close(errChan) // Close the channel to stop range loop
-
-	for err := range errChan {
+		_, err := fmt.Scan(&input)
 		if err != nil {
-			fmt.Printf("Error: %v\n", err)
+			fmt.Println("Error:", err)
+			return
+		}
+
+		// visualize config
+		if input == "1" {
+			input = ""
+			cmd := exec.Command("clear")
+			cmd.Stdout = os.Stdout
+			cmd.Run()
+			PrintConfig(config)
+			for {
+				_, err := fmt.Scan(&input)
+				if err != nil {
+					fmt.Println("Error:", err)
+				}
+
+				if input == "x" {
+					cmd := exec.Command("clear")
+					cmd.Stdout = os.Stdout
+					cmd.Run()
+					break
+				}
+			}
+		}
+
+		// run tests
+		if input == "2" {
+			DeleteUpperLines(8)
+			done := make(chan bool)
+			go ShowSpinnerAnimation(done)
+			time.Sleep(7 * time.Second)
+			done <- true
+			time.Sleep(200 * time.Millisecond)
+			return
+		}
+
+		cmd := exec.Command("clear")
+		cmd.Stdout = os.Stdout
+		cmd.Run()
+	}
+
+}
+
+func PrintConfig(config *Config) {
+
+	fmt.Println("Config data - " + "\033[35m" + "Type in 'x'" + "\033[0m" + " to return to the main menu")
+	fmt.Printf("\n")
+	fmt.Printf("\033[33mIperf Arguments\033[0m\n\n")
+	fmt.Printf("Example iperf command to be run (IP and Port change according to data provided)\n")
+	fmt.Printf("\033[32miperf3 %s\033[0m\n", strings.Join(GenerateIperfArgs(config, 0), " "))
+
+	fmt.Printf("\n")
+
+	fmt.Printf("\033[33mServerlist to connect to\033[0m\n\n")
+	for i, ip := range config.ServerIPList {
+		fmt.Printf("Serversite %d: \n", i)
+		fmt.Printf("- IP: \033[34m%s\033[0m \n", ip)                         // IP in blue
+		fmt.Printf("- Port: \033[34m%d\033[0m \n", config.ServerPortList[i]) // Port in blue
+		fmt.Printf("\n")
+	}
+
+	fmt.Printf("\n")
+	fmt.Printf(">")
+}
+
+func PrintMenu() {
+	// ANSI escape code for the desired color (#aa9340)
+	color := "\033[38;2;170;147;64m"
+	reset := "\033[0m" // Reset color to default
+
+	// Menu with colored lines
+	title := color + `
+╔═════════════════════════════════════════════╗
+║` + reset + `                 Main Menu                   ` + color + `║
+╠═════════════════════════════════════════════╣
+║` + reset + `  1. Check the provided config               ` + color + `║
+║` + reset + `  2. Run all tests                           ` + color + `║
+╚═════════════════════════════════════════════╝` + reset
+
+	// Print the menu
+	fmt.Println(title)
+}
+
+func DeleteUpperLines(n int) {
+	for i := 0; i < n; i++ {
+		// Move the cursor up one line and clear the line
+		fmt.Printf("\033[1A\033[K")
+	}
+}
+
+func ShowSpinnerAnimation(done chan bool) {
+	// Spinner frames for animation
+	frames := []string{"⠋", "⠙", "⠸", "⠴", "⠦", "⠧", "⠇", "⠏"}
+
+	// Animation loop
+	for {
+		for _, frame := range frames {
+			select {
+			case <-done:
+				fmt.Printf("\r%s Done!                    \n", frame) // Clear line and print "Done!"
+				return
+			default:
+				fmt.Printf("\r%s Waiting...", frame) // Print the spinner first, then "Waiting..."
+				time.Sleep(100 * time.Millisecond)   // Delay between frames
+			}
 		}
 	}
+}
 
-	// TODO inform about error
-	fmt.Println("All Iperf tests completed.")
+func PrintTitle() {
+	// Title 1 with dark blue color (#00345f)
+	fmt.Printf("\n")
+	title_1 := "\033[38;2;0;52;95m" + `▗▖ ▗▖▗▄▄▄ ▗▄▄▖ 
+▐▌ ▐▌▐▌  █▐▌ ▐▌
+▐▌ ▐▌▐▌  █▐▛▀▚▖
+▐▙█▟▌▐▙▄▄▀▐▌ ▐▌` + "\033[0m\n"
+
+	// Title 2 with the desired color (#aa9340)
+	title_2 :=
+
+		`
+▗▖  ▗▖▗▄▄▄▖▗▄▄▄▖▗▖  ▗▖▗▄▄▄▖ ▗▄▄▖ ▗▄▄▖
+▐▛▚▖▐▌▐▌     █  ▐▛▚▞▜▌▐▌   ▐▌   ▐▌   
+▐▌ ▝▜▌▐▛▀▀▘  █  ▐▌  ▐▌▐▛▀▀▘ ▝▀▚▖ ▝▀▚▖
+▐▌  ▐▌▐▙▄▄▖  █  ▐▌  ▐▌▐▙▄▄▖▗▄▄▞▘▗▄▄▞▘`
+
+	fmt.Printf(title_1)
+	fmt.Println(title_2)
 }
 
 func CopyFile(src, dst string) error {
