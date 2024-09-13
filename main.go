@@ -27,7 +27,7 @@ type Config struct {
 	Args           Args     `json:"Args"`
 }
 
-func RunTest(config *Config) {
+func RunTest(config *Config, done chan bool) {
 
 	timestamp := time.Now().Format("Mon Jan 2 15:04:05 MST 2006")
 
@@ -66,7 +66,7 @@ func RunTest(config *Config) {
 		}
 	}
 
-	fmt.Println("All Iperf tests completed.")
+	done <- true
 }
 
 func GenerateIperfArgs(config *Config, siteNum int) []string {
@@ -204,11 +204,11 @@ func main() {
 		// run tests
 		if input == "2" {
 			DeleteUpperLines(8)
+
 			done := make(chan bool)
 			go ShowSpinnerAnimation(done)
-			time.Sleep(7 * time.Second)
-			done <- true
-			time.Sleep(200 * time.Millisecond)
+			RunTest(config, done)
+
 			return
 		}
 
@@ -267,6 +267,9 @@ func DeleteUpperLines(n int) {
 }
 
 func ShowSpinnerAnimation(done chan bool) {
+	time.Sleep(200 * time.Millisecond)
+
+	fmt.Printf("\n")
 	// Spinner frames for animation
 	frames := []string{"⠋", "⠙", "⠸", "⠴", "⠦", "⠧", "⠇", "⠏"}
 
@@ -275,11 +278,11 @@ func ShowSpinnerAnimation(done chan bool) {
 		for _, frame := range frames {
 			select {
 			case <-done:
-				fmt.Printf("\r%s Done!                    \n", frame) // Clear line and print "Done!"
+				fmt.Printf("\r%s \033[32mDone!\033[0m                    \n", frame)
 				return
 			default:
-				fmt.Printf("\r%s Waiting...", frame) // Print the spinner first, then "Waiting..."
-				time.Sleep(100 * time.Millisecond)   // Delay between frames
+				fmt.Printf("\r%s \033[33mWaiting...\033[0m", frame) // Print the spinner first, then "Waiting..."
+				time.Sleep(100 * time.Millisecond)                  // Delay between frames
 			}
 		}
 	}
