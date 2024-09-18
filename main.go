@@ -124,7 +124,7 @@ func RunIperf(config *Config, siteNum int, outputFileName string, outputDir stri
 	// Run the iperf command and capture the output
 	output, err := cmd.CombinedOutput()
 	if err != nil {
-		errChan <- fmt.Errorf("error running iperf: %v", err)
+		errChan <- fmt.Errorf("error running iperf: %v on site %v", err, outputFileName)
 		return
 	}
 
