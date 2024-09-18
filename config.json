@@ -1,14 +1,16 @@
 {
-    "Connections": 2,
+    "Connections": 1,
+
+    "Names": [
+      "Messpunkt-A"
+    ],
 
     "ServerIPList": [
-      "192.168.0.168",
-      "192.168.0.168"
+      "192.168.0.209"
     ],
     
     "ServerPortList": [
-      5201,
-      5202
+      5201
     ],
 
     "Args" : {
@@ -16,6 +18,9 @@
       "GetServerData" : true,
       "ReverseMode" : false,
       "TestRunimeSeconds" : 12,
-      "ReportIntervall": 2
+      "ReportIntervall": 1,
+      "Bandwidth" : "",
+      "ParallelStreams" : 0,
+      "JSONformat": false
     }
   }

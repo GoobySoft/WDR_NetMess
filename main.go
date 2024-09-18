@@ -18,10 +18,14 @@ type Args struct {
 	ReverseMode       bool   `json:"ReverseMode"`
 	TestRunimeSeconds int    `json:"TestRunimeSeconds"`
 	ReportIntervall   int    `json:"ReportIntervall"`
+	Bandwidth         string `json:"Bandwidth"`
+	ParallelStreams   int    `json:"ParallelStreams"`
+	JSONformat        bool   `json:"JSONformat"`
 }
 
 type Config struct {
 	Connections    int      `json:"Connections"`
+	Names          []string `json:"Names"`
 	ServerIPList   []string `json:"ServerIPList"`
 	ServerPortList []int    `json:"ServerPortList"`
 	Args           Args     `json:"Args"`
@@ -50,8 +54,7 @@ func RunTest(config *Config, done chan bool) {
 
 	for i := range config.ServerIPList {
 
-		outputFileName := "Site_" + strconv.Itoa(i)
-
+		outputFileName := config.Names[i]
 		wg.Add(1)
 
 		go RunIperf(config, i, outputFileName, outputDir, &wg, errChan)
@@ -90,6 +93,18 @@ func GenerateIperfArgs(config *Config, siteNum int) []string {
 	// Add the --get-server-output flag if we want the server output
 	if config.Args.GetServerData {
 		args = append([]string{"--get-server-output"}, args...)
+	}
+
+	if config.Args.Bandwidth != "" {
+		args = append([]string{"-bw " + config.Args.Bandwidth}, args...)
+	}
+
+	if config.Args.ParallelStreams > 0 {
+		args = append([]string{"-P " + strconv.Itoa(config.Args.ParallelStreams)}, args...)
+	}
+
+	if config.Args.JSONformat {
+		args = append([]string{"-J"}, args...)
 	}
 
 	return args
