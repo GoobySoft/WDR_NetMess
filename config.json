@@ -16,7 +16,6 @@
     "Args" : {
       "Protocol" : "UDP",
       "GetServerData" : true,
-      "ReverseMode" : false,
       "TestRunimeSeconds" : 12,
       "ReportIntervall": 1,
       "Bandwidth" : "",

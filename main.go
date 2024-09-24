@@ -15,7 +15,6 @@ import (
 type Args struct {
 	Protocol          string `json:"Protocol"`
 	GetServerData     bool   `json:"GetServerData"`
-	ReverseMode       bool   `json:"ReverseMode"`
 	TestRunimeSeconds int    `json:"TestRunimeSeconds"`
 	ReportIntervall   int    `json:"ReportIntervall"`
 	Bandwidth         string `json:"Bandwidth"`
@@ -31,7 +30,7 @@ type Config struct {
 	Args           Args     `json:"Args"`
 }
 
-func RunTest(config *Config, done chan bool) {
+func RunTest(config *Config, reverseMode bool, done chan bool) {
 
 	timestamp := time.Now().Format("Mon Jan 2 15:04:05 MST 2006")
 
@@ -57,7 +56,7 @@ func RunTest(config *Config, done chan bool) {
 		outputFileName := config.Names[i]
 		wg.Add(1)
 
-		go RunIperf(config, i, outputFileName, outputDir, &wg, errChan)
+		go RunIperf(config, i, reverseMode, outputFileName, outputDir, &wg, errChan)
 	}
 
 	wg.Wait()      // Wait for all goroutines to finish
@@ -72,7 +71,7 @@ func RunTest(config *Config, done chan bool) {
 	done <- true
 }
 
-func GenerateIperfArgs(config *Config, siteNum int) []string {
+func GenerateIperfArgs(config *Config, siteNum int, reverseMode bool) []string {
 	args := []string{
 		"-c", config.ServerIPList[siteNum],
 		"-p", strconv.Itoa(config.ServerPortList[siteNum]),
@@ -86,7 +85,7 @@ func GenerateIperfArgs(config *Config, siteNum int) []string {
 	}
 
 	// Add the -R flag if reverse mode is true
-	if config.Args.ReverseMode {
+	if reverseMode {
 		args = append([]string{"-R"}, args...)
 	}
 
@@ -110,14 +109,14 @@ func GenerateIperfArgs(config *Config, siteNum int) []string {
 	return args
 }
 
-func RunIperf(config *Config, siteNum int, outputFileName string, outputDir string, wg *sync.WaitGroup, errChan chan<- error) {
+func RunIperf(config *Config, siteNum int, reverseMode bool, outputFileName string, outputDir string, wg *sync.WaitGroup, errChan chan<- error) {
 	defer wg.Done() // Decrement the counter when the goroutine completes
 
 	fmt.Println("Running iperf for", outputFileName)
 
 	var cmd *exec.Cmd
 
-	args := GenerateIperfArgs(config, siteNum)
+	args := GenerateIperfArgs(config, siteNum, reverseMode)
 
 	cmd = exec.Command("iperf3", args...)
 
@@ -175,7 +174,28 @@ func main() {
 	config := ParseConfig()
 
 	if config == nil {
-		fmt.Printf("Something went wrong during the validation of the config")
+		fmt.Printf("Something went wrong during the validation of the config\n")
+		return
+	}
+
+	reverseMode := false
+	quickRun := false
+
+	// Iterate over os.Args to check for 'r' and 'q'
+	for _, arg := range os.Args[1:] {
+		if arg == "r" {
+			reverseMode = true
+		}
+		if arg == "q" {
+			quickRun = true
+		}
+	}
+
+	// Handle quick run mode ('q')
+	if quickRun {
+		done := make(chan bool)
+		go ShowSpinnerAnimation(done)
+		RunTest(config, reverseMode, done)
 		return
 	}
 
@@ -222,7 +242,7 @@ func main() {
 
 			done := make(chan bool)
 			go ShowSpinnerAnimation(done)
-			RunTest(config, done)
+			RunTest(config, reverseMode, done)
 
 			return
 		}
