@@ -1,6 +1,7 @@
 package main
 
 import (
+	"context"
 	"encoding/json"
 	"fmt"
 	"io"
@@ -114,23 +115,31 @@ func RunIperf(config *Config, siteNum int, reverseMode bool, outputFileName stri
 
 	fmt.Println("Running iperf for", outputFileName)
 
-	var cmd *exec.Cmd
+	// Create a context with a timeout
+	ctx, cancel := context.WithTimeout(context.Background(), time.Duration(config.Args.TestRunimeSeconds+5)*time.Second)
+	defer cancel()
 
 	args := GenerateIperfArgs(config, siteNum, reverseMode)
 
-	cmd = exec.Command("iperf3", args...)
+	// Create the iperf command with context
+	cmd := exec.CommandContext(ctx, "iperf3", args...)
 
 	// Run the iperf command and capture the output
 	output, err := cmd.CombinedOutput()
+	if ctx.Err() == context.DeadlineExceeded {
+		errChan <- fmt.Errorf("\033[31miperf command timed out: %v\033[0m", outputFileName) // Red
+		return
+	}
+
 	if err != nil {
-		errChan <- fmt.Errorf("error running iperf: %v on site %v", err, outputFileName)
+		errChan <- fmt.Errorf("\033[31merror running iperf: %v on site %v\033[0m", err, outputFileName) // Red
 		return
 	}
 
 	// Open the file for writing the output
 	file, err := os.Create(outputDir + "/" + outputFileName + ".txt")
 	if err != nil {
-		errChan <- fmt.Errorf("error creating output file: %v", err)
+		errChan <- fmt.Errorf("\033[31merror creating output file: %v\033[0m", err) // Red
 		return
 	}
 	defer file.Close()
@@ -138,7 +147,7 @@ func RunIperf(config *Config, siteNum int, reverseMode bool, outputFileName stri
 	// Write the output to the file
 	_, err = file.WriteString(string(output))
 	if err != nil {
-		errChan <- fmt.Errorf("error writing output to file: %v", err)
+		errChan <- fmt.Errorf("\033[31merror writing output to file: %v\033[0m", err) // Red
 		return
 	}
 
@@ -220,7 +229,7 @@ func main() {
 			cmd := exec.Command("clear")
 			cmd.Stdout = os.Stdout
 			cmd.Run()
-			PrintConfig(config)
+			PrintConfig(config, reverseMode)
 			for {
 				_, err := fmt.Scan(&input)
 				if err != nil {
@@ -254,13 +263,13 @@ func main() {
 
 }
 
-func PrintConfig(config *Config) {
+func PrintConfig(config *Config, reverseMode bool) {
 
 	fmt.Println("Config data - " + "\033[35m" + "Type in 'x'" + "\033[0m" + " to return to the main menu")
 	fmt.Printf("\n")
 	fmt.Printf("\033[33mIperf Arguments\033[0m\n\n")
 	fmt.Printf("Example iperf command to be run (IP and Port change according to data provided)\n")
-	fmt.Printf("\033[32miperf3 %s\033[0m\n", strings.Join(GenerateIperfArgs(config, 0), " "))
+	fmt.Printf("\033[32miperf3 %s\033[0m\n", strings.Join(GenerateIperfArgs(config, 0, reverseMode), " "))
 
 	fmt.Printf("\n")
 

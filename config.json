@@ -1,16 +1,19 @@
 {
-    "Connections": 1,
+    "Connections": 2,
 
     "Names": [
-      "Messpunkt-A"
+      "Messpunkt-A",
+      "Messpunkt-B"
     ],
 
     "ServerIPList": [
+      "192.168.0.209",
       "192.168.0.209"
     ],
     
     "ServerPortList": [
-      5201
+      5201,
+      5202
     ],
 
     "Args" : {
